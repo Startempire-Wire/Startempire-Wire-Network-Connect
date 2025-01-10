@@ -1,9 +1,98 @@
-.DS_Store
-phpcs.xml
-phpunit.xml
-Thumbs.db
-wp-cli.local.yml
-node_modules/
-*.sql
-*.tar.gz
+# Development Dependencies
+/node_modules/
+/vendor/
+/bower_components/
+
+# Build Artifacts
+/build/
+/dist/
 *.zip
+*.tar.gz
+/css/*.min.css
+/js/*.min.js
+*.map
+
+# Testing
+/tests/coverage/
+/phpunit.xml
+.phpunit.result.cache
+/tests/test-results/
+wp-tests-config.php
+*.sql
+*.sqlite
+
+# Environment & Configuration
+.env
+.env.*
+!.env.example
+wp-config.php
+wp-config-*.php
+auth.json
+*.log
+
+# IDE & Editor Files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+*.bak
+*.cache
+*.tmp
+
+# WordPress Specific
+/wp-content/uploads/
+/wp-content/upgrade/
+/wp-content/backup-db/
+/wp-content/cache/
+/wp-content/backups/
+
+# Plugin Specific
+/screenshots/cache/
+/public/cache/
+api-keys.php
+credentials.php
+secret.php
+
+# Dependency Lock Files
+package-lock.json
+yarn.lock
+composer.lock
+
+# Build Tool Configuration
+.sass-cache/
+.grunt/
+.npm/
+.eslintcache
+
+# Documentation
+/docs/_site/
+/docs/.sass-cache/
+/docs/node_modules/
+
+# OS Generated Files
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+desktop.ini
+
+# Temporary Files
+*.tmp
+*.temp
+*.swp
+*~
+
+# Local Development
+docker-compose.override.yml
+local-config.php
+wp-cli.local.yml
+
+# Misc
+*.bak
+*.old
+*.orig
+.htaccess
