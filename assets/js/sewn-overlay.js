@@ -28,6 +28,7 @@
     chatSessionId: null,
     scoreData: null,
     networkStats: null,
+    profileData: null, // Pairing profile effective
   };
 
   // ── Auth ──────────────────────────────────────────────────
@@ -104,6 +105,35 @@
       if (resp.ok) {
         const data = await resp.json();
         state.scoreData = data.score || data.scoreboard?.score || null;
+        render();
+      }
+    } catch (e) { /* silent */ }
+    // Also load pairing profile + drift
+    loadProfile();
+    loadDrift();
+  }
+
+  async function loadProfile() {
+    if (!state.jwt) return;
+    try {
+      const resp = await fetch(`${SCOREBOARD}/v1/pairing/profile/effective`, {
+        headers: { 'Authorization': `Bearer ${state.jwt}` }
+      });
+      if (resp.ok) {
+        state.profileData = await resp.json();
+        render();
+      }
+    } catch (e) { /* silent */ }
+  }
+
+  async function loadDrift() {
+    if (!state.jwt) return;
+    try {
+      const resp = await fetch(`${SCOREBOARD}/v1/pairing/neural-drift`, {
+        headers: { 'Authorization': `Bearer ${state.jwt}` }
+      });
+      if (resp.ok) {
+        state.driftData = await resp.json();
         render();
       }
     } catch (e) { /* silent */ }
@@ -255,6 +285,31 @@
     `;
   }
 
+  function renderPairingNudge() {
+    const p = state.profileData;
+    if (!p) return '';
+    const score = p.pairing_score || 0;
+    const level = p.level || 'Initializing';
+    const acc = ((p.accuracy || 0) * 100).toFixed(0);
+
+    if (score >= 60) {
+      return `<div class="sewn-pairing-badge">🧬 Profile: ${score}/100 (${level}) • ${acc}% accurate</div>`;
+    }
+
+    // Nudge if pairing is incomplete
+    return `
+      <div class="sewn-pairing-nudge">
+        <div class="sewn-pairing-score">🧬 Pairing: ${score}/100</div>
+        <div class="sewn-pairing-hint">
+          ${score < 20 ? 'Complete assessments to calibrate Wirebot' : 'Chat more to improve accuracy'}
+        </div>
+        <a href="${SCOREBOARD}/#profile" target="_blank" class="sewn-btn-pairing">
+          ${score < 20 ? 'Start Profile Assessment →' : 'View Profile →'}
+        </a>
+      </div>
+    `;
+  }
+
   function renderScore() {
     if (!state.scoreData) {
       return '<div class="sewn-loading">Loading scoreboard...</div>';
@@ -273,7 +328,36 @@
           ${renderLane('⚙️', 'Systems', s.systems_score || 0, 15)}
         </div>
         ${s.intent ? `<div class="sewn-intent">🎯 ${esc(s.intent)}</div>` : ''}
+        ${renderDriftBar()}
+        ${renderRabbitAlert()}
+        ${renderPairingNudge()}
         <a href="${SCOREBOARD}" target="_blank" class="sewn-btn-secondary">Open Full Scoreboard →</a>
+      </div>
+    `;
+  }
+
+  function renderDriftBar() {
+    const d = state.driftData?.drift;
+    if (!d) return '';
+    const color = d.signal === 'deep_sync' ? '#00ff64' : d.signal === 'in_drift' ? '#4a9eff' : d.signal === 'weak' || d.signal === 'disconnected' ? '#ff3232' : '#ffc800';
+    const label = (d.signal || 'unknown').replace(/_/g, ' ').toUpperCase();
+    return `
+      <div class="sewn-drift" style="border-color:${color}30;background:${color}08">
+        <span class="sewn-drift-label">🧠 DRIFT</span>
+        <div class="sewn-drift-track">
+          <div class="sewn-drift-fill" style="width:${d.score||0}%;background:${color}"></div>
+        </div>
+        <span class="sewn-drift-val" style="color:${color}">${d.score||0}%</span>
+      </div>
+    `;
+  }
+
+  function renderRabbitAlert() {
+    const r = state.driftData?.drift?.rabbit;
+    if (!r || !r.active) return '';
+    return `
+      <div class="sewn-rabbit">
+        🐇 <strong>R.A.B.I.T.</strong> — ${esc(r.message || 'Spiral detected')}
       </div>
     `;
   }
@@ -472,6 +556,24 @@
       }
       .sewn-btn-secondary:hover { background: #1f2937; }
       
+      /* Pairing */
+      .sewn-pairing-nudge {
+        margin-top: 12px; padding: 10px; border-radius: 8px;
+        background: rgba(124,124,255,0.08); border: 1px solid rgba(124,124,255,0.2);
+      }
+      .sewn-pairing-score { font-size: 13px; font-weight: 600; color: #7c7cff; }
+      .sewn-pairing-hint { font-size: 11px; color: #9ca3af; margin: 4px 0 8px; }
+      .sewn-btn-pairing {
+        display: block; text-align: center; padding: 6px; font-size: 12px;
+        color: #a78bfa; background: rgba(124,124,255,0.12);
+        border: 1px solid rgba(124,124,255,0.3); border-radius: 6px;
+        text-decoration: none;
+      }
+      .sewn-btn-pairing:hover { background: rgba(124,124,255,0.2); }
+      .sewn-pairing-badge {
+        margin-top: 8px; text-align: center; font-size: 11px; color: #7c7cff;
+      }
+      
       /* Chat */
       .sewn-chat { display: flex; flex-direction: column; height: 100%; }
       .sewn-chat-messages {
@@ -525,6 +627,23 @@
       .sewn-lane-score { width: 40px; text-align: right; color: #9ca3af; }
       .sewn-intent { margin-top: 12px; padding: 8px; background: #1f2937; border-radius: 8px; font-size: 13px; color: #d1d5db; }
       
+      /* Drift */
+      .sewn-drift {
+        display: flex; align-items: center; gap: 8px;
+        margin-top: 10px; padding: 8px 12px; border-radius: 8px;
+        border: 1px solid; font-size: 12px;
+      }
+      .sewn-drift-label { font-size: 9px; letter-spacing: 0.1em; opacity: 0.5; white-space: nowrap; }
+      .sewn-drift-track { flex: 1; height: 5px; background: #374151; border-radius: 3px; overflow: hidden; }
+      .sewn-drift-fill { height: 100%; border-radius: 3px; transition: width 0.8s ease; }
+      .sewn-drift-val { font-weight: 700; font-size: 12px; min-width: 30px; text-align: right; }
+      .sewn-rabbit {
+        margin-top: 8px; padding: 8px 12px; border-radius: 8px;
+        background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3);
+        font-size: 12px; color: #fbbf24; animation: sewn-blink 1.5s infinite;
+      }
+      @keyframes sewn-blink { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
       /* Network */
       .sewn-network { padding: 16px; }
       .sewn-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
