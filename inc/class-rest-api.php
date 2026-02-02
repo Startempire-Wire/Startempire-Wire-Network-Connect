@@ -80,6 +80,13 @@ class SEWN_Connect_REST_API {
             'permission_callback' => [$this, 'check_logged_in'],
         ]);
 
+        // SSO redirect: browser-based login → Ring Leader JWT → redirect to surface
+        register_rest_route($ns, '/auth/sso', [
+            'methods'  => 'GET',
+            'callback' => [$this, 'handle_sso'],
+            'permission_callback' => '__return_true',
+        ]);
+
         // Health check (public)
         register_rest_route($ns, '/health', [
             'methods'  => 'GET',
@@ -195,6 +202,87 @@ class SEWN_Connect_REST_API {
                 'email'        => $user->user_email,
             ],
         ], 200);
+    }
+
+    // ─── SSO ───────────────────────────────────────────────────
+    // Browser flow: user is logged into .com → redirect to any surface with JWT
+    // GET /sewn-connect/v1/auth/sso?redirect_uri=https://wins.wirebot.chat
+
+    public function handle_sso($request) {
+        $redirect_uri = $request->get_param('redirect_uri') ?? '';
+
+        // Whitelist allowed redirect targets
+        $allowed = [
+            'https://wins.wirebot.chat',
+            'https://helm.wirebot.chat',
+            'https://startempirewire.network',
+        ];
+        $valid = false;
+        foreach ($allowed as $prefix) {
+            if (str_starts_with($redirect_uri, $prefix)) { $valid = true; break; }
+        }
+        if (!$valid) {
+            return new WP_REST_Response(['error' => 'Invalid redirect_uri'], 400);
+        }
+
+        // Check WP cookie auth
+        $user = wp_get_current_user();
+        if (!$user || !$user->ID) {
+            // Not logged in → redirect to wp-login.php, then back here
+            $login_url = wp_login_url(rest_url('sewn-connect/v1/auth/sso') . '?redirect_uri=' . urlencode($redirect_uri));
+            header('Location: ' . $login_url, true, 302);
+            exit;
+        }
+
+        // User is logged in. Build user data and request JWT from Ring Leader.
+        $user_data = [
+            'user_id'      => $user->ID,
+            'username'     => $user->user_login,
+            'email'        => $user->user_email,
+            'display_name' => $user->display_name,
+            'roles'        => $user->roles,
+            'is_admin'     => in_array('administrator', $user->roles, true),
+            'url'          => $user->user_url,
+            'registered'   => $user->user_registered,
+            'description'  => get_user_meta($user->ID, 'description', true),
+            'avatar_url'   => get_avatar_url($user->ID, ['size' => 96]),
+        ];
+
+        // Call Ring Leader /auth/issue with internal key
+        $rl_url = rtrim(get_option('sewn_connect_ring_leader_url', 'https://startempirewire.network/wp-json/sewn/v1'), '/');
+        $internal_key = get_option('sewn_connect_internal_key', '');
+
+        $response = wp_remote_post($rl_url . '/auth/issue', [
+            'headers' => [
+                'Content-Type'       => 'application/json',
+                'X-SEWN-Internal-Key' => $internal_key,
+            ],
+            'body'    => wp_json_encode($user_data),
+            'timeout' => 10,
+        ]);
+
+        if (is_wp_error($response)) {
+            return new WP_REST_Response(['error' => 'Ring Leader unreachable: ' . $response->get_error_message()], 502);
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $code = wp_remote_retrieve_response_code($response);
+
+        if ($code !== 200 || empty($body['token'])) {
+            return new WP_REST_Response([
+                'error' => 'JWT issuance failed',
+                'detail' => $body['error'] ?? 'Unknown error',
+            ], 502);
+        }
+
+        // Redirect to surface with JWT in URL fragment (not query — fragments don't hit server logs)
+        $jwt = $body['token'];
+        $user_json = urlencode(wp_json_encode($body['user']));
+        $separator = str_contains($redirect_uri, '#') ? '&' : '#';
+        $final_url = $redirect_uri . '/auth/callback' . $separator . 'token=' . $jwt . '&user=' . $user_json;
+
+        header('Location: ' . $final_url, true, 302);
+        exit;
     }
 
     // ─── Health ─────────────────────────────────────────────────
