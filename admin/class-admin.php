@@ -30,11 +30,13 @@ class SEWN_Connect_Admin {
         register_setting('sewn_connect', 'sewn_connect_cache_ttl');
         register_setting('sewn_connect', 'sewn_connect_scoreboard_url');
         register_setting('sewn_connect', 'sewn_connect_wirebot_url');
+        register_setting('sewn_connect', 'sewn_connect_overlay_enabled');
     }
 
     public function render_page() {
         if (!current_user_can('manage_options')) return;
 
+        $overlay_on = get_option('sewn_connect_overlay_enabled', '1');
         $rl_url = get_option('sewn_connect_ring_leader_url', 'https://startempirewire.network/wp-json/sewn/v1');
         $api_key = get_option('sewn_connect_api_key', '');
         $cache_ttl = get_option('sewn_connect_cache_ttl', 300);
@@ -42,7 +44,7 @@ class SEWN_Connect_Admin {
         $wb_url = get_option('sewn_connect_wirebot_url', 'https://helm.wirebot.chat');
 
         // Health check
-        require_once STARTEMPIRE_WIRE_NETWORK_CONNECT_PATH . 'inc/class-ring-leader-client.php';
+        require_once SEWN_CONNECT_PATH . 'inc/class-ring-leader-client.php';
         $client = new SEWN_Connect_Ring_Leader_Client();
         $healthy = $client->health_check();
         $stats = $healthy ? $client->get_network_stats() : null;
@@ -68,6 +70,16 @@ class SEWN_Connect_Admin {
                 <?php settings_fields('sewn_connect'); ?>
                 
                 <table class="form-table">
+                    <tr>
+                        <th>Wirebot Overlay Widget</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="sewn_connect_overlay_enabled" value="1" <?php checked($overlay_on, '1'); ?> />
+                                Enable floating ⚡ button + overlay panel on frontend
+                            </label>
+                            <p class="description">Shows Wirebot chat, scoreboard summary, and network stats to logged-in users.</p>
+                        </td>
+                    </tr>
                     <tr>
                         <th>Ring Leader API URL</th>
                         <td>

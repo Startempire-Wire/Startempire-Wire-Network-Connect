@@ -1,42 +1,55 @@
 <?php
+/**
+ * Connect Plugin — Public/Frontend
+ * 
+ * Enqueues the SEWN overlay widget on member sites.
+ * The overlay provides Wirebot chat, scoreboard summary, and network stats.
+ */
 class Startempire_Wire_Network_Connect_Public {
 
     public function __construct() {
-        // Initialize your public-facing functionality here.
     }
 
+    /**
+     * Enqueue overlay JS + pass config to frontend
+     */
     public function enqueue_scripts() {
-		$script_path = plugin_dir_path(__FILE__) . '../js/startempire-wire-network-connect.js';
-    	$version = filemtime($script_path);
-
-        // Enqueue your scripts here.
-		wp_enqueue_script(
-            'startempire-wire-network-connect-public',
-            plugin_dir_url(__FILE__) . '../js/startempire-wire-network-connect.js',
-            array(), // Dependencies. Add 'jquery' here if you're using jQuery in your script.
-            $version, // Version number.
-            true // Load the script in the footer.
-        );
-    }
-
-    public function enqueue_styles() {
-		$style_path = plugin_dir_path(__FILE__) . '../css/startempire-wire-network-connect.css';
-    	$version = filemtime($style_path);
-		
-        // Enqueue your styles here.
-		wp_enqueue_style(
-            'startempire-wire-network-connect-public', // The handle of your style.
-            plugin_dir_url(__FILE__) . '../css/startempire-wire-network-connect.css', // The path to your style file.
-            array(), // The dependencies of your style.
-            $version // The version number of your style.
-        );
-    }
-
-    public function add_connect_button() {
-        // Check if the user is logged in.
-        if (is_user_logged_in()) {
-            // Output the "Connect to Browser Extension" button.
-            echo '<button id="connect-extension-button">Connect to Browser Extension</button>';
+        // Only load if overlay is enabled (default: enabled)
+        if (!get_option('sewn_connect_overlay_enabled', '1')) {
+            return;
         }
+
+        // Don't load in admin
+        if (is_admin()) return;
+
+        $script_path = plugin_dir_path(__FILE__) . '../assets/js/sewn-overlay.js';
+        $version = file_exists($script_path) ? filemtime($script_path) : '0.2.0';
+
+        wp_enqueue_script(
+            'sewn-overlay',
+            plugin_dir_url(__FILE__) . '../assets/js/sewn-overlay.js',
+            [],
+            $version,
+            true
+        );
+
+        // Pass config to JS
+        $config = [
+            'ringLeaderUrl' => rtrim(get_option('sewn_connect_ring_leader_url', 'https://startempirewire.network/wp-json/sewn/v1'), '/'),
+            'scoreboardUrl' => rtrim(get_option('sewn_connect_scoreboard_url', 'https://wins.wirebot.chat'), '/'),
+            'siteName'      => get_bloginfo('name') ?: 'Startempire Wire',
+            'nonce'         => wp_create_nonce('wp_rest'),
+            'ajaxUrl'       => rest_url('sewn-connect/v1/auth/exchange'),
+            'userId'        => get_current_user_id(),
+        ];
+
+        wp_localize_script('sewn-overlay', 'sewnConnect', $config);
+    }
+
+    /**
+     * Enqueue overlay styles (minimal — most styles are inline in JS)
+     */
+    public function enqueue_styles() {
+        // Styles are injected by the JS overlay for zero-FOUC
     }
 }
