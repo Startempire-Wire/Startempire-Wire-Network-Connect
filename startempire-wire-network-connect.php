@@ -25,9 +25,11 @@ require_once SEWN_CONNECT_PATH . 'inc/class-ring-leader-client.php';
 require_once SEWN_CONNECT_PATH . 'inc/class-rest-api.php';
 require_once SEWN_CONNECT_PATH . 'public/class-startempire-wire-network-connect-public.php';
 
+// Deploy class registers REST endpoints on all requests + admin UI on workbench
+require_once SEWN_CONNECT_PATH . 'admin/class-deploy.php';
+
 if (is_admin()) {
     require_once SEWN_CONNECT_PATH . 'admin/class-admin.php';
-    require_once SEWN_CONNECT_PATH . 'admin/class-deploy.php';
 }
 
 // ─── Main Plugin Class ─────────────────────────────────────────
@@ -44,9 +46,11 @@ class Startempire_Wire_Network_Connect {
         $this->rest_api = new SEWN_Connect_REST_API($this->client);
         $this->public   = new Startempire_Wire_Network_Connect_Public();
         
+        // Deploy manager: REST endpoints on all requests, admin UI only on workbench
+        new SEWN_Connect_Deploy();
+
         if (is_admin()) {
             $this->admin = new SEWN_Connect_Admin();
-            new SEWN_Connect_Deploy();
         }
     }
 

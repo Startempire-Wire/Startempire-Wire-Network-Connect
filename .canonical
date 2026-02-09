@@ -8,5 +8,4 @@
 # All other installations pull from the GitHub canonical.
 #
 # Other known deployments:
-#   /home/wirebot/startempire-wire-network-connect/  → READ-ONLY mirror (pull only)
 #   /home/startempirentwk/.../plugins/               → Not yet installed

@@ -31,6 +31,8 @@ class SEWN_Connect_Admin {
         register_setting('sewn_connect', 'sewn_connect_scoreboard_url');
         register_setting('sewn_connect', 'sewn_connect_wirebot_url');
         register_setting('sewn_connect', 'sewn_connect_overlay_enabled');
+        register_setting('sewn_connect', 'sewn_connect_deploy_secret');
+        register_setting('sewn_connect', 'sewn_connect_auto_update');
     }
 
     public function render_page() {
@@ -42,6 +44,8 @@ class SEWN_Connect_Admin {
         $cache_ttl = get_option('sewn_connect_cache_ttl', 300);
         $sb_url = get_option('sewn_connect_scoreboard_url', 'https://wins.wirebot.chat');
         $wb_url = get_option('sewn_connect_wirebot_url', 'https://helm.wirebot.chat');
+        $deploy_secret = get_option('sewn_connect_deploy_secret', '');
+        $auto_update = get_option('sewn_connect_auto_update', '');
 
         // Health check
         require_once SEWN_CONNECT_PATH . 'inc/class-ring-leader-client.php';
@@ -117,6 +121,30 @@ class SEWN_Connect_Admin {
                     </tr>
                 </table>
 
+                <h2 style="margin-top:24px;">🔄 Plugin Auto-Update</h2>
+                <table class="form-table">
+                    <tr>
+                        <th>Deploy Secret</th>
+                        <td>
+                            <input type="text" name="sewn_connect_deploy_secret" value="<?php echo esc_attr($deploy_secret); ?>" class="regular-text code" />
+                            <p class="description">
+                                Shared secret for remote deploy pings. The workbench generates this when adding your site.<br>
+                                Paste it here to allow the workbench to trigger plugin updates on this site.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Daily Auto-Update</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="sewn_connect_auto_update" value="1" <?php checked($auto_update, '1'); ?> />
+                                Automatically check GitHub for updates daily (independent of workbench)
+                            </label>
+                            <p class="description">When enabled, this site checks GitHub for new versions every 24 hours and self-updates.</p>
+                        </td>
+                    </tr>
+                </table>
+
                 <?php submit_button(); ?>
             </form>
 
@@ -133,6 +161,8 @@ class SEWN_Connect_Admin {
                     <tr><td><code>/sewn-connect/v1/member/scoreboard</code></td><td>GET</td><td>Auth</td><td>Member's scoreboard data</td></tr>
                     <tr><td><code>/sewn-connect/v1/auth/exchange</code></td><td>POST</td><td>Auth</td><td>Exchange WP auth → Ring Leader JWT</td></tr>
                     <tr><td><code>/sewn-connect/v1/health</code></td><td>GET</td><td>Public</td><td>Ring Leader connection status</td></tr>
+                    <tr><td><code>/sewn-connect/v1/deploy/status</code></td><td>GET</td><td>Deploy Secret</td><td>Current plugin version + auto-update state</td></tr>
+                    <tr><td><code>/sewn-connect/v1/deploy/pull</code></td><td>POST</td><td>Deploy Secret</td><td>Trigger self-update from GitHub</td></tr>
                 </tbody>
             </table>
         </div>
