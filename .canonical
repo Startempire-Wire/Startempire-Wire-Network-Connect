@@ -1,0 +1,12 @@
+# SEWN Connect — Repository Roles
+#
+# CANONICAL:  https://github.com/Startempire-Wire/Startempire-Wire-Network-Connect
+# WORKBENCH:  /home/startempirewire/public_html/wp-content/plugins/startempire-wire-network-connect/
+# WORKFLOW:   Develop here → push to GitHub → other sites pull from GitHub
+#
+# This is the WORKBENCH copy. Changes are made here, committed, and pushed.
+# All other installations pull from the GitHub canonical.
+#
+# Other known deployments:
+#   /home/wirebot/startempire-wire-network-connect/  → READ-ONLY mirror (pull only)
+#   /home/startempirentwk/.../plugins/               → Not yet installed
