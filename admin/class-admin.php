@@ -121,7 +121,11 @@ class SEWN_Connect_Admin {
                     </tr>
                 </table>
 
-                <h2 style="margin-top:24px;">🔄 Plugin Auto-Update</h2>
+                <?php if ( defined('SEWN_DEPLOY_DEV_MODE') && SEWN_DEPLOY_DEV_MODE ): ?>
+                <h2 style="margin-top:24px;">🔄 Plugin Auto-Update <span style="background:#d63638;color:#fff;font-size:11px;padding:2px 8px;border-radius:3px;vertical-align:middle;">DEV / TESTING ONLY</span></h2>
+                <div class="notice notice-warning inline" style="margin:8px 0;">
+                    <p>These features auto-download code from GitHub. For production, use standard WordPress update mechanisms.</p>
+                </div>
                 <table class="form-table">
                     <tr>
                         <th>Deploy Secret</th>
@@ -144,6 +148,7 @@ class SEWN_Connect_Admin {
                         </td>
                     </tr>
                 </table>
+                <?php endif; ?>
 
                 <?php submit_button(); ?>
             </form>
@@ -161,8 +166,10 @@ class SEWN_Connect_Admin {
                     <tr><td><code>/sewn-connect/v1/member/scoreboard</code></td><td>GET</td><td>Auth</td><td>Member's scoreboard data</td></tr>
                     <tr><td><code>/sewn-connect/v1/auth/exchange</code></td><td>POST</td><td>Auth</td><td>Exchange WP auth → Ring Leader JWT</td></tr>
                     <tr><td><code>/sewn-connect/v1/health</code></td><td>GET</td><td>Public</td><td>Ring Leader connection status</td></tr>
-                    <tr><td><code>/sewn-connect/v1/deploy/status</code></td><td>GET</td><td>Deploy Secret</td><td>Current plugin version + auto-update state</td></tr>
-                    <tr><td><code>/sewn-connect/v1/deploy/pull</code></td><td>POST</td><td>Deploy Secret</td><td>Trigger self-update from GitHub</td></tr>
+                    <?php if ( defined('SEWN_DEPLOY_DEV_MODE') && SEWN_DEPLOY_DEV_MODE ): ?>
+                    <tr><td><code>/sewn-connect/v1/deploy/status</code></td><td>GET</td><td>Deploy Secret</td><td>Current plugin version + auto-update state <em>(dev mode)</em></td></tr>
+                    <tr><td><code>/sewn-connect/v1/deploy/pull</code></td><td>POST</td><td>Deploy Secret</td><td>Trigger self-update from GitHub <em>(dev mode)</em></td></tr>
+                    <?php endif; ?>
                 </tbody>
             </table>
         </div>

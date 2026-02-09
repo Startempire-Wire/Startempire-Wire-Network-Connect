@@ -4,12 +4,15 @@
  *
  * Workbench-only admin panel: push to GitHub canonical, manage per-site auto-update.
  *
- * TWO deployment models:
- *   LOCAL  — site on same server, CLI git pull (legacy, VPS sites)
- *   REMOTE — site on any server, REST ping → site self-updates from GitHub
+ * ⚠️  AUTO-DOWNLOAD FEATURES (REST deploy endpoints, self-update cron, remote deploy
+ *     triggers, and zip-from-GitHub downloads) are gated behind SEWN_DEPLOY_DEV_MODE.
+ *     These are for DEV / TESTING environments only. In production, plugin updates
+ *     should go through the standard WordPress update mechanism or manual deployment.
  *
- * Remote sites run a self-update check via sewn-connect/v1/deploy/pull endpoint
- * (registered by this plugin on every install, gated by shared deploy secret).
+ *     To enable: define('SEWN_DEPLOY_DEV_MODE', true); in wp-config.php
+ *
+ * The git status panel and "Push to Canonical" button on the workbench are always
+ * available regardless of dev mode — those only affect the workbench's own repo.
  *
  * @package Startempire_Wire_Network_Connect
  */
@@ -41,28 +44,42 @@ class SEWN_Connect_Deploy {
     const DEPLOY_SCRIPT = '/usr/local/bin/sewn-connect-deploy';
 
     private bool $is_workbench;
+    private bool $is_dev_mode;
 
     public function __construct() {
         $this->is_workbench = (bool) get_option( self::WORKBENCH_KEY, false );
+        $this->is_dev_mode  = defined( 'SEWN_DEPLOY_DEV_MODE' ) && SEWN_DEPLOY_DEV_MODE;
 
         // ─── Workbench-only: admin panel + push/deploy handlers ───
         if ( $this->is_workbench ) {
             add_action( 'admin_menu', [ $this, 'add_submenu' ] );
             add_action( 'admin_init', [ $this, 'register_settings' ] );
+            // Push to canonical is always available on workbench (just pushes git)
             add_action( 'admin_post_sewn_push_canonical', [ $this, 'handle_push' ] );
-            add_action( 'admin_post_sewn_deploy_sites', [ $this, 'handle_deploy' ] );
-            add_action( 'admin_post_sewn_toggle_site', [ $this, 'handle_toggle_site' ] );
-            add_action( 'admin_post_sewn_add_deploy_site', [ $this, 'handle_add_site' ] );
-            add_action( 'admin_post_sewn_remove_deploy_site', [ $this, 'handle_remove_site' ] );
+
+            // Deploy/site-management handlers require dev mode
+            if ( $this->is_dev_mode ) {
+                add_action( 'admin_post_sewn_deploy_sites', [ $this, 'handle_deploy' ] );
+                add_action( 'admin_post_sewn_toggle_site', [ $this, 'handle_toggle_site' ] );
+                add_action( 'admin_post_sewn_add_deploy_site', [ $this, 'handle_add_site' ] );
+                add_action( 'admin_post_sewn_remove_deploy_site', [ $this, 'handle_remove_site' ] );
+            }
         }
 
-        // ─── All sites: register REST endpoint for remote deploy ping ───
-        add_action( 'rest_api_init', [ $this, 'register_deploy_endpoint' ] );
+        // ─── DEV MODE ONLY: REST endpoints + self-update cron ───
+        if ( $this->is_dev_mode ) {
+            add_action( 'rest_api_init', [ $this, 'register_deploy_endpoint' ] );
 
-        // ─── All sites: daily self-update cron (if auto-update enabled) ───
-        add_action( 'sewn_connect_self_update', [ $this, 'self_update_from_github' ] );
-        if ( ! wp_next_scheduled( 'sewn_connect_self_update' ) && get_option( self::AUTOUPDATE_KEY, false ) ) {
-            wp_schedule_event( time(), 'daily', 'sewn_connect_self_update' );
+            add_action( 'sewn_connect_self_update', [ $this, 'self_update_from_github' ] );
+            if ( ! wp_next_scheduled( 'sewn_connect_self_update' ) && get_option( self::AUTOUPDATE_KEY, false ) ) {
+                wp_schedule_event( time(), 'daily', 'sewn_connect_self_update' );
+            }
+        } else {
+            // Unschedule if dev mode was turned off
+            $ts = wp_next_scheduled( 'sewn_connect_self_update' );
+            if ( $ts ) {
+                wp_unschedule_event( $ts, 'sewn_connect_self_update' );
+            }
         }
     }
 
@@ -405,25 +422,29 @@ class SEWN_Connect_Deploy {
         if ( $pushed ) {
             $output[] = '✅ Pushed to GitHub canonical.';
 
-            // 3. Deploy to all enabled sites
-            $sites   = self::get_sites();
-            $commit  = trim( shell_exec( "cd {$dir} && git rev-parse --short HEAD 2>/dev/null" ) ?: '' );
-            $changed = false;
+            // 3. Deploy to all enabled sites (DEV MODE ONLY)
+            if ( $this->is_dev_mode ) {
+                $sites   = self::get_sites();
+                $commit  = trim( shell_exec( "cd {$dir} && git rev-parse --short HEAD 2>/dev/null" ) ?: '' );
+                $changed = false;
 
-            foreach ( $sites as $slug => &$site ) {
-                if ( empty( $site['enabled'] ) ) continue;
+                foreach ( $sites as $slug => &$site ) {
+                    if ( empty( $site['enabled'] ) ) continue;
 
-                if ( ( $site['type'] ?? 'local' ) === 'remote' ) {
-                    $output[] = $this->deploy_remote( $slug, $site );
-                } else {
-                    $output[] = $this->deploy_local( $slug, $site );
+                    if ( ( $site['type'] ?? 'local' ) === 'remote' ) {
+                        $output[] = $this->deploy_remote( $slug, $site );
+                    } else {
+                        $output[] = $this->deploy_local( $slug, $site );
+                    }
+                    $changed = true;
                 }
-                $changed = true;
-            }
-            unset( $site );
+                unset( $site );
 
-            if ( $changed ) {
-                self::update_sites( $sites );
+                if ( $changed ) {
+                    self::update_sites( $sites );
+                }
+            } else {
+                $output[] = 'ℹ️ Auto-deploy to sites skipped (SEWN_DEPLOY_DEV_MODE not enabled).';
             }
         } else {
             $output[] = '❌ Push may have failed — check output above.';
@@ -569,6 +590,25 @@ class SEWN_Connect_Deploy {
             <h1>⚡ SEWN Connect — Deploy Manager</h1>
             <p class="description">Push from workbench → GitHub canonical → auto-update across the network.</p>
 
+            <?php if ( ! $this->is_dev_mode ): ?>
+                <div class="notice notice-warning" style="border-left-color:#dba617;">
+                    <p>
+                        <strong>⚠️ DEV MODE OFF</strong> — Auto-deploy to sites, REST deploy endpoints, and self-update cron are <strong>disabled</strong>.<br>
+                        Git status and "Push to Canonical" still work (workbench git operations only).<br>
+                        To enable auto-deploy features, add to <code>wp-config.php</code>:
+                        <code style="background:#f0f0f0;padding:2px 6px;">define('SEWN_DEPLOY_DEV_MODE', true);</code>
+                    </p>
+                </div>
+            <?php else: ?>
+                <div class="notice notice-info" style="border-left-color:#d63638;">
+                    <p>
+                        <strong>🧪 DEV / TESTING MODE</strong> — Auto-deploy features are <strong>active</strong>.
+                        REST endpoints, self-update cron, and remote deploy pings are live.
+                        <em>Not recommended for production — use standard WordPress update mechanisms instead.</em>
+                    </p>
+                </div>
+            <?php endif; ?>
+
             <?php if ( $result ): ?>
                 <div class="notice notice-info is-dismissible">
                     <pre style="white-space:pre-wrap;margin:8px 0;font-size:13px;"><?php echo esc_html( $result ); ?></pre>
@@ -615,7 +655,7 @@ class SEWN_Connect_Deploy {
             <!-- ═══ Push to Canonical ═══ -->
             <div class="card" style="max-width:900px;padding:16px 20px;margin-top:16px;">
                 <h2 style="margin-top:0;">🚀 Push to Canonical</h2>
-                <p class="description">Commits changes → pushes to GitHub → deploys to all enabled sites (local + remote).</p>
+                <p class="description">Commits changes → pushes to GitHub.<?php echo $this->is_dev_mode ? ' Then deploys to all enabled sites (local + remote).' : ''; ?></p>
                 <form method="post" action="<?php echo admin_url( 'admin-post.php' ); ?>">
                     <input type="hidden" name="action" value="sewn_push_canonical" />
                     <?php wp_nonce_field( 'sewn_push_canonical' ); ?>
@@ -627,10 +667,14 @@ class SEWN_Connect_Deploy {
                     <?php endif; ?>
                     <p>
                         <?php
-                        $btn_label = $git['dirty'] ? 'Commit & Push + Deploy All' : 'Push + Deploy All';
+                        if ( $this->is_dev_mode ) {
+                            $btn_label = $git['dirty'] ? 'Commit & Push + Deploy All' : 'Push + Deploy All';
+                        } else {
+                            $btn_label = $git['dirty'] ? 'Commit & Push to GitHub' : 'Push to GitHub';
+                        }
                         $btn_class = ( $git['dirty'] || $git['ahead'] > 0 ) ? 'button-primary' : 'button-secondary';
                         ?>
-                        <button type="submit" class="button <?php echo $btn_class; ?>" onclick="return confirm('Push to GitHub and deploy to all enabled sites?');">
+                        <button type="submit" class="button <?php echo $btn_class; ?>" onclick="return confirm('Push to GitHub<?php echo $this->is_dev_mode ? ' and deploy to all enabled sites' : ''; ?>?');">
                             <?php echo $btn_label; ?>
                         </button>
                         <?php if ( ! $git['dirty'] && $git['ahead'] === 0 ): ?>
@@ -640,7 +684,8 @@ class SEWN_Connect_Deploy {
                 </form>
             </div>
 
-            <!-- ═══ Site Registry ═══ -->
+            <?php if ( $this->is_dev_mode ): ?>
+            <!-- ═══ Site Registry (DEV MODE ONLY) ═══ -->
             <div class="card" style="max-width:900px;padding:16px 20px;margin-top:16px;">
                 <h2 style="margin-top:0;">🌐 Network Sites</h2>
                 <p class="description">
@@ -841,6 +886,7 @@ GitHub (<?php echo self::GITHUB_URL; ?>)
 Each site also has optional daily self-update cron
 (checks GitHub independently, no workbench ping needed)</pre>
             </div>
+            <?php endif; // is_dev_mode ?>
         </div>
         <?php
     }
