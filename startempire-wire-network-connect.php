@@ -7,7 +7,7 @@
  * Author URI:      https://philoveracity.com
  * Text Domain:     startempire-wire-network-connect
  * Domain Path:     /languages
- * Version:         0.3.0
+ * Version:         0.4.1
  * Requires PHP:    8.0
  *
  * @package         Startempire_Wire_Network_Connect
@@ -15,7 +15,7 @@
 
 if (!defined('WPINC')) die;
 
-define('SEWN_CONNECT_VERSION', '0.3.0');
+define('SEWN_CONNECT_VERSION', '0.4.1');
 define('SEWN_CONNECT_PATH', plugin_dir_path(__FILE__));
 define('SEWN_CONNECT_URL', plugin_dir_url(__FILE__));
 
@@ -27,6 +27,7 @@ require_once SEWN_CONNECT_PATH . 'public/class-startempire-wire-network-connect-
 
 if (is_admin()) {
     require_once SEWN_CONNECT_PATH . 'admin/class-admin.php';
+    require_once SEWN_CONNECT_PATH . 'admin/class-deploy.php';
 }
 
 // ─── Main Plugin Class ─────────────────────────────────────────
@@ -45,6 +46,7 @@ class Startempire_Wire_Network_Connect {
         
         if (is_admin()) {
             $this->admin = new SEWN_Connect_Admin();
+            new SEWN_Connect_Deploy();
         }
     }
 
