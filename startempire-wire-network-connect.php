@@ -54,8 +54,55 @@ class Startempire_Wire_Network_Connect {
         add_option('sewn_connect_cache_ttl', 300);
         add_option('sewn_connect_scoreboard_url', 'https://wins.wirebot.chat');
         add_option('sewn_connect_wirebot_url', 'https://helm.wirebot.chat');
+        add_option('sewn_connect_overlay_enabled', false);
+        add_option('sewn_connect_badge_enabled', true);
+
+        // Validate Ring Leader connection
+        $this->validate_ring_leader_connection();
         
         flush_rewrite_rules();
+    }
+
+    /**
+     * Validate connection to Ring Leader on activation.
+     * Stores connection status for admin notice.
+     */
+    private function validate_ring_leader_connection() {
+        $url = get_option('sewn_connect_ring_leader_url', 'https://startempirewire.network/wp-json/sewn/v1');
+        
+        $response = wp_remote_get($url . '/network/stats', [
+            'timeout' => 10,
+            'headers' => ['Accept' => 'application/json'],
+        ]);
+
+        if (is_wp_error($response)) {
+            update_option('sewn_connect_status', [
+                'connected' => false,
+                'error' => $response->get_error_message(),
+                'checked_at' => current_time('mysql'),
+            ]);
+            return false;
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($code === 200 && isset($body['total_members'])) {
+            update_option('sewn_connect_status', [
+                'connected' => true,
+                'network_members' => $body['total_members'] ?? 0,
+                'ring_leader_version' => $body['version'] ?? 'unknown',
+                'checked_at' => current_time('mysql'),
+            ]);
+            return true;
+        }
+
+        update_option('sewn_connect_status', [
+            'connected' => false,
+            'error' => "Unexpected response (HTTP {$code})",
+            'checked_at' => current_time('mysql'),
+        ]);
+        return false;
     }
 
     public function deactivate() {
